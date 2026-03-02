@@ -1,3 +1,4 @@
+const { Vec3 } = require("vec3");
 const {
   lookAtSmooth,
   sneak,
@@ -63,10 +64,10 @@ function getOnBackToBackTurnPhaseFn(
     // Perpendicular vector
     const perpX = -nz;
     const perpZ = nx;
-    const nudgedTarget = otherBotPosition.offset(
-      perpX * epsilon,
-      0,
-      perpZ * epsilon,
+    const nudgedTarget = new Vec3(
+      otherBotPosition.x + perpX * epsilon,
+      otherBotPosition.y,
+      otherBotPosition.z + perpZ * epsilon,
     );
 
     await lookAtSmooth(bot, nudgedTarget, mySpeed, {

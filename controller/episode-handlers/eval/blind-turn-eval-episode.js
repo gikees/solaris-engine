@@ -24,16 +24,11 @@ function getOnBlindTurnPhaseFn(
       "blindTurnPhase beginning",
     );
 
-    // Determine roles: sharedBotRng picks which bot is the blind turner
-    const blindRoll = sharedBotRng();
-    const sortedNames = [bot.username, args.other_bot_name].sort();
-    const blindBotName = blindRoll < 0.5 ? sortedNames[0] : sortedNames[1];
-    const watcherBotName =
-      blindBotName === bot.username ? args.other_bot_name : bot.username;
-    const isBlindBot = bot.username === blindBotName;
-
-    // Pick which perpendicular side the blind bot faces (for setupEpisode consistency)
-    const sideDir = sharedBotRng() < 0.5 ? 1 : -1;
+    // Read roles stored by setupEpisode (avoids RNG sequence mismatch)
+    const blindBotName = episodeInstance._blindBotName;
+    const watcherBotName = episodeInstance._watcherBotName;
+    const isBlindBot = episodeInstance._isBlindBot;
+    const sideDir = episodeInstance._sideDir;
 
     const me = bot.entity.position;
     const them = otherBotPosition;
@@ -129,14 +124,19 @@ class BlindTurnEvalEpisode extends BaseEpisode {
     botPosition,
     otherBotPosition,
   ) {
-    // Determine roles (must match phase handler logic exactly)
+    // Determine roles and store on instance so phase handler can read them
     const blindRoll = sharedBotRng();
     const sortedNames = [bot.username, args.other_bot_name].sort();
     const blindBotName = blindRoll < 0.5 ? sortedNames[0] : sortedNames[1];
+    const watcherBotName =
+      blindBotName === bot.username ? args.other_bot_name : bot.username;
     const isBlindBot = bot.username === blindBotName;
-
-    // Pick perpendicular side (must match phase handler)
     const sideDir = sharedBotRng() < 0.5 ? 1 : -1;
+
+    this._blindBotName = blindBotName;
+    this._watcherBotName = watcherBotName;
+    this._isBlindBot = isBlindBot;
+    this._sideDir = sideDir;
 
     if (isBlindBot) {
       // Blind bot faces 90° sideways (perpendicular to connecting line)

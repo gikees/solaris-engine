@@ -1,7 +1,6 @@
 const { Vec3 } = require("vec3");
 const {
   lookAtSmooth,
-  lookSmooth,
   sneak,
   stopAll,
   horizontalDistanceTo,
@@ -55,6 +54,9 @@ function getOnWallWalkPhaseFn(
       wallEndTarget = new Vec3(me.x, me.y, endZ);
     }
 
+    // Record detour direction in metadata
+    episodeInstance._evalMetadata.detour_end = goLeft ? "left" : "right";
+
     console.log(
       `[${bot.username}] Wall walk: walking ${goLeft ? "left" : "right"} to ${wallEndTarget.x.toFixed(1)}, ${wallEndTarget.z.toFixed(1)}`,
     );
@@ -70,14 +72,20 @@ function getOnWallWalkPhaseFn(
     });
 
     // Phase 2: Walk parallel to wall until past the wall end
+    const maxWalkTicks = 200;
+    let walkTicks = 0;
     bot.setControlState("forward", true);
-    while (horizontalDistanceTo(bot.entity.position, wallEndTarget) > 1.5) {
+    while (
+      horizontalDistanceTo(bot.entity.position, wallEndTarget) > 1.5 &&
+      walkTicks < maxWalkTicks
+    ) {
       // Keep looking at the walk target
       await lookAtSmooth(bot, wallEndTarget, 90, {
         randomized: false,
         useEasing: false,
       });
       await bot.waitForTicks(WALK_TICK_INTERVAL);
+      walkTicks += WALK_TICK_INTERVAL;
     }
     stopAll(bot);
 

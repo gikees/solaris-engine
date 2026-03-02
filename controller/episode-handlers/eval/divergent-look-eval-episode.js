@@ -20,6 +20,11 @@ function getOnDivergentLookPhaseFn(
       "divergentLookPhase beginning",
     );
 
+    episodeInstance._evalMetadata = {
+      yaw_alpha: episodeInstance._yawAlpha,
+      yaw_bravo: episodeInstance._yawBravo,
+    };
+
     // Sneak to signal evaluation start
     await sneak(bot);
     const startTick = bot.time.age;
@@ -87,10 +92,9 @@ class DivergentLookEvalEpisode extends BaseEpisode {
     const isAlpha = bot.username < args.other_bot_name;
     const myYaw = isAlpha ? yaw1 : yaw2;
 
-    this._evalMetadata = {
-      yaw_alpha: isAlpha ? yaw1 : yaw2,
-      yaw_bravo: isAlpha ? yaw2 : yaw1,
-    };
+    // Store yaw values on instance for the phase handler to set metadata
+    this._yawAlpha = yaw1;
+    this._yawBravo = yaw2;
 
     // Compute a fake "other bot position" 10 blocks in the assigned yaw direction.
     // The framework will auto-orient this bot to face that point before recording starts.
