@@ -62,6 +62,21 @@ const {
 const {
   TurnToLookOppositeEvalEpisode,
 } = require("./episode-handlers/eval/turn-to-look-opposite-eval-episode");
+const {
+  DivergentLookEvalEpisode,
+} = require("./episode-handlers/eval/divergent-look-eval-episode");
+const {
+  BackToBackTurnEvalEpisode,
+} = require("./episode-handlers/eval/back-to-back-turn-eval-episode");
+const {
+  BlindTurnEvalEpisode,
+} = require("./episode-handlers/eval/blind-turn-eval-episode");
+const {
+  ParallelTurnEvalEpisode,
+} = require("./episode-handlers/eval/parallel-turn-eval-episode");
+const {
+  WallWalkEvalEpisode,
+} = require("./episode-handlers/eval/wall-walk-eval-episode");
 const turnToLookEvalTpPoints = require("./episode-handlers/eval/turn-to-look-eval-episode-tp-points.json");
 
 /**
@@ -92,6 +107,11 @@ const episodeClassMap = {
   rotationEval: RotationEvalEpisode,
   turnToLookEval: TurnToLookEvalEpisode,
   turnToLookOppositeEval: TurnToLookOppositeEvalEpisode,
+  divergentLookEval: DivergentLookEvalEpisode,
+  backToBackTurnEval: BackToBackTurnEvalEpisode,
+  blindTurnEval: BlindTurnEvalEpisode,
+  parallelTurnEval: ParallelTurnEvalEpisode,
+  wallWalkEval: WallWalkEvalEpisode,
 };
 
 /**
@@ -107,6 +127,11 @@ const evalEpisodeClasses = [
   RotationEvalEpisode,
   TurnToLookEvalEpisode,
   TurnToLookOppositeEvalEpisode,
+  DivergentLookEvalEpisode,
+  BackToBackTurnEvalEpisode,
+  BlindTurnEvalEpisode,
+  ParallelTurnEvalEpisode,
+  WallWalkEvalEpisode,
 ];
 
 /**
@@ -149,6 +174,11 @@ const defaultEpisodeTypes = [
   "rotationEval",
   "turnToLookEval",
   "turnToLookOppositeEval",
+  "divergentLookEval",
+  "backToBackTurnEval",
+  "blindTurnEval",
+  "parallelTurnEval",
+  "wallWalkEval",
 ];
 
 const isCustomEpisodeTypes =
