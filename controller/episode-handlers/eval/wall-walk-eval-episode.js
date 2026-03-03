@@ -1,17 +1,19 @@
 const { Vec3 } = require("vec3");
 const {
+  gotoWithTimeout,
+  initializePathfinder,
   lookAtSmooth,
   sneak,
   stopAll,
 } = require("../../primitives/movement");
+const { GoalXZ } = require("../../utils/bot-factory");
 const { BaseEpisode } = require("../base-episode");
 
 const CAMERA_SPEED_DEGREES_PER_SEC = 30;
 const EPISODE_MIN_TICKS = 300;
 const WALL_WIDTH = 9;
 const WALL_HEIGHT = 3;
-const WALK_TICKS = 40;
-const WALK_TICK_INTERVAL = 2;
+const WAYPOINT_TIMEOUT_MS = 8000;
 
 function getOnWallWalkPhaseFn(
   bot,
@@ -30,64 +32,104 @@ function getOnWallWalkPhaseFn(
       "wallWalkPhase beginning",
     );
 
-    // Pick walk direction along wall (same for both bots via sharedBotRng)
-    const goLeft = sharedBotRng() < 0.5;
-
-    // Retrieve wall info stored during setupEpisode
+    const isWalker = episodeInstance._isWalker;
     const wallAxis = episodeInstance._wallAxis;
-
-    // Compute walk direction vector along the wall axis
-    let walkDirX, walkDirZ;
-    if (wallAxis === "x") {
-      walkDirX = goLeft ? -1 : 1;
-      walkDirZ = 0;
-    } else {
-      walkDirX = 0;
-      walkDirZ = goLeft ? -1 : 1;
-    }
-
-    // Record direction in metadata
-    episodeInstance._evalMetadata.walk_direction = goLeft ? "left" : "right";
-    episodeInstance._evalMetadata.walk_ticks = WALK_TICKS;
-
-    console.log(
-      `[${bot.username}] Wall walk: walking ${goLeft ? "left" : "right"} along ${wallAxis} axis for ${WALK_TICKS} ticks`,
-    );
+    const wallCenter = episodeInstance._wallCenter;
+    const goLeft = episodeInstance._goLeft;
 
     // Sneak to signal evaluation start
     await sneak(bot);
     const startTick = bot.time.age;
 
-    // Phase 1: Turn parallel to wall (same world direction for both bots)
-    const me = bot.entity.position;
-    const walkTarget = me.offset(walkDirX * 10, 0, walkDirZ * 10);
-    await lookAtSmooth(bot, walkTarget, CAMERA_SPEED_DEGREES_PER_SEC, {
-      randomized: false,
-      useEasing: false,
-    });
+    if (isWalker) {
+      // Walker: navigate around the wall via 3 waypoints
+      const halfWidth = Math.floor(WALL_WIDTH / 2);
+      const cx = wallCenter.x + 0.5;
+      const cz = wallCenter.z + 0.5;
+      const distFromWall = 5.5;
 
-    // Phase 2: Walk the length of the wall (fixed tick count)
-    bot.setControlState("forward", true);
-    for (let i = 0; i < WALK_TICKS; i += WALK_TICK_INTERVAL) {
-      const currentPos = bot.entity.position;
-      const lookAhead = currentPos.offset(walkDirX * 10, 0, walkDirZ * 10);
-      await lookAtSmooth(bot, lookAhead, 90, {
+      let wp1x, wp1z, wp2x, wp2z, wp3x, wp3z;
+
+      if (wallAxis === "x") {
+        // Wall along X, bots separated along Z
+        // Walker starts at (cx, cz + side*distFromWall)
+        const walkerSide = episodeInstance._walkerSide; // +1 or -1 along Z
+        const edgeOffset = goLeft ? -(halfWidth + 2) : halfWidth + 2;
+
+        // WP1: past the wall edge, same Z as start
+        wp1x = cx + edgeOffset;
+        wp1z = cz + walkerSide * distFromWall;
+        // WP2: same X as WP1, cross to other side of wall
+        wp2x = cx + edgeOffset;
+        wp2z = cz - walkerSide * distFromWall;
+        // WP3: back to wall center on observer's side
+        wp3x = cx;
+        wp3z = cz - walkerSide * distFromWall;
+      } else {
+        // Wall along Z, bots separated along X
+        const walkerSide = episodeInstance._walkerSide; // +1 or -1 along X
+        const edgeOffset = goLeft ? -(halfWidth + 2) : halfWidth + 2;
+
+        // WP1: past the wall edge, same X as start
+        wp1x = cx + walkerSide * distFromWall;
+        wp1z = cz + edgeOffset;
+        // WP2: same Z as WP1, cross to other side of wall
+        wp2x = cx - walkerSide * distFromWall;
+        wp2z = cz + edgeOffset;
+        // WP3: back to wall center on observer's side
+        wp3x = cx - walkerSide * distFromWall;
+        wp3z = cz;
+      }
+
+      const waypoints = [
+        { x: wp1x, z: wp1z, label: "WP1 (past edge)" },
+        { x: wp2x, z: wp2z, label: "WP2 (cross sides)" },
+        { x: wp3x, z: wp3z, label: "WP3 (observer side)" },
+      ];
+
+      initializePathfinder(bot, { allowSprinting: false });
+
+      for (const wp of waypoints) {
+        console.log(
+          `[${bot.username}] Walking to ${wp.label}: (${wp.x.toFixed(1)}, ${wp.z.toFixed(1)})`,
+        );
+        try {
+          await gotoWithTimeout(bot, new GoalXZ(wp.x, wp.z), {
+            timeoutMs: WAYPOINT_TIMEOUT_MS,
+          });
+        } catch (err) {
+          console.log(
+            `[${bot.username}] Waypoint ${wp.label} timeout/error: ${err?.message || err}`,
+          );
+        }
+        await bot.waitForTicks(5);
+      }
+
+      stopAll(bot);
+
+      // Turn to face observer
+      const otherEntity = bot.players[args.other_bot_name]?.entity;
+      const currentOtherPos = otherEntity
+        ? otherEntity.position
+        : otherBotPosition;
+      await lookAtSmooth(bot, currentOtherPos, CAMERA_SPEED_DEGREES_PER_SEC, {
         randomized: false,
         useEasing: false,
       });
-      await bot.waitForTicks(WALK_TICK_INTERVAL);
+    } else {
+      // Observer: stand still, face the wall center
+      const wallLookTarget = new Vec3(
+        wallCenter.x + 0.5,
+        wallCenter.y + 1,
+        wallCenter.z + 0.5,
+      );
+      await lookAtSmooth(
+        bot,
+        wallLookTarget,
+        CAMERA_SPEED_DEGREES_PER_SEC,
+        { randomized: false, useEasing: false },
+      );
     }
-    stopAll(bot);
-
-    // Phase 3: Turn back toward other bot's current position
-    const otherEntity = bot.players[args.other_bot_name]?.entity;
-    const currentOtherPos = otherEntity
-      ? otherEntity.position
-      : otherBotPosition;
-    await lookAtSmooth(bot, currentOtherPos, CAMERA_SPEED_DEGREES_PER_SEC, {
-      randomized: false,
-      useEasing: false,
-    });
 
     // Wait for minimum ticks
     const endTick = bot.time.age;
@@ -124,8 +166,9 @@ function getOnWallWalkPhaseFn(
 }
 
 /**
- * Eval episode where a wall spawns between bots, they turn the same direction
- * and walk parallel to the wall, then turn back to face each other.
+ * Eval episode where a wall spawns between bots: one bot (walker) navigates
+ * around the wall via waypoints to the other side, while the other bot
+ * (observer) stands still.
  * @extends BaseEpisode
  */
 class WallWalkEvalEpisode extends BaseEpisode {
@@ -145,6 +188,13 @@ class WallWalkEvalEpisode extends BaseEpisode {
   ) {
     // Only the lead bot (alphabetically first) places the wall
     const isLeadBot = bot.username < args.other_bot_name;
+
+    // Use sharedBotRng to decide walker/observer (same result for both bots)
+    const walkerIsLead = sharedBotRng() < 0.5;
+    this._isWalker = walkerIsLead === isLeadBot;
+
+    // Use sharedBotRng to pick which side of the wall to walk around
+    this._goLeft = sharedBotRng() < 0.5;
 
     // Calculate midpoint between bots
     const midX = (botPosition.x + otherBotPosition.x) / 2;
@@ -208,6 +258,8 @@ class WallWalkEvalEpisode extends BaseEpisode {
       wall_height: WALL_HEIGHT,
       wall_center: { x: wallCenterX, y: wallCenterY, z: wallCenterZ },
       wall_axis: wallAxis,
+      role: this._isWalker ? "walker" : "observer",
+      walk_direction: this._goLeft ? "left" : "right",
     };
 
     // Place bots in a straight line through wall center, 5 blocks from wall surface
@@ -221,12 +273,20 @@ class WallWalkEvalEpisode extends BaseEpisode {
       const botSide = botPosition.z < midZ ? -1 : 1;
       botPosNew = new Vec3(cx, botPosition.y, cz + botSide * distFromWall);
       otherPosNew = new Vec3(cx, otherBotPosition.y, cz - botSide * distFromWall);
+      // Store walker's side for waypoint calculation
+      this._walkerSide = this._isWalker ? botSide : -botSide;
     } else {
       // Wall along Z → bots separated along X, both at wall center Z
       const botSide = botPosition.x < midX ? -1 : 1;
       botPosNew = new Vec3(cx + botSide * distFromWall, botPosition.y, cz);
       otherPosNew = new Vec3(cx - botSide * distFromWall, otherBotPosition.y, cz);
+      // Store walker's side for waypoint calculation
+      this._walkerSide = this._isWalker ? botSide : -botSide;
     }
+
+    console.log(
+      `[${bot.username}] Role: ${this._isWalker ? "WALKER" : "OBSERVER"}, direction: ${this._goLeft ? "left" : "right"}`,
+    );
 
     return {
       botPositionNew: botPosNew,
