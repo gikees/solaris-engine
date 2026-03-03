@@ -8,7 +8,7 @@ const { BaseEpisode } = require("../base-episode");
 
 const CAMERA_SPEED_DEGREES_PER_SEC = 30;
 const EPISODE_MIN_TICKS = 300;
-const WALL_WIDTH = 8;
+const WALL_WIDTH = 9;
 const WALL_HEIGHT = 3;
 const WALK_TICKS = 40;
 const WALK_TICK_INTERVAL = 2;
@@ -210,20 +210,22 @@ class WallWalkEvalEpisode extends BaseEpisode {
       wall_axis: wallAxis,
     };
 
-    // Snap bots to cardinal axis so the wall is perfectly axis-aligned
-    const halfDist = 5.5; // 5 blocks from wall surface + 0.5 for wall center
+    // Place bots in a straight line through wall center, 5 blocks from wall surface
+    const distFromWall = 5.5; // 5 blocks from surface + 0.5 to wall block center
+    const cx = wallCenterX + 0.5; // center of the wall block
+    const cz = wallCenterZ + 0.5;
     let botPosNew, otherPosNew;
 
     if (wallAxis === "x") {
-      // Wall along X → bots separated along Z
+      // Wall along X → bots separated along Z, both at wall center X
       const botSide = botPosition.z < midZ ? -1 : 1;
-      botPosNew = new Vec3(midX, botPosition.y, midZ + botSide * halfDist);
-      otherPosNew = new Vec3(midX, otherBotPosition.y, midZ - botSide * halfDist);
+      botPosNew = new Vec3(cx, botPosition.y, cz + botSide * distFromWall);
+      otherPosNew = new Vec3(cx, otherBotPosition.y, cz - botSide * distFromWall);
     } else {
-      // Wall along Z → bots separated along X
+      // Wall along Z → bots separated along X, both at wall center Z
       const botSide = botPosition.x < midX ? -1 : 1;
-      botPosNew = new Vec3(midX + botSide * halfDist, botPosition.y, midZ);
-      otherPosNew = new Vec3(midX - botSide * halfDist, otherBotPosition.y, midZ);
+      botPosNew = new Vec3(cx + botSide * distFromWall, botPosition.y, cz);
+      otherPosNew = new Vec3(cx - botSide * distFromWall, otherBotPosition.y, cz);
     }
 
     return {
