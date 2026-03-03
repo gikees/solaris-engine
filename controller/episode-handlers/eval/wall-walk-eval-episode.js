@@ -10,7 +10,7 @@ const CAMERA_SPEED_DEGREES_PER_SEC = 30;
 const EPISODE_MIN_TICKS = 300;
 const WALL_WIDTH = 8;
 const WALL_HEIGHT = 3;
-const WALK_TICKS = 100;
+const WALK_TICKS = 40;
 const WALK_TICK_INTERVAL = 2;
 
 function getOnWallWalkPhaseFn(
@@ -130,8 +130,8 @@ function getOnWallWalkPhaseFn(
  */
 class WallWalkEvalEpisode extends BaseEpisode {
   static WORKS_IN_NON_FLAT_WORLD = false;
-  static INIT_MIN_BOTS_DISTANCE = 16;
-  static INIT_MAX_BOTS_DISTANCE = 20;
+  static INIT_MIN_BOTS_DISTANCE = 11;
+  static INIT_MAX_BOTS_DISTANCE = 11;
 
   async setupEpisode(
     bot,
@@ -210,10 +210,25 @@ class WallWalkEvalEpisode extends BaseEpisode {
       wall_axis: wallAxis,
     };
 
-    // Bots face each other (through the wall) at episode start
+    // Snap bots to cardinal axis so the wall is perfectly axis-aligned
+    const halfDist = 5.5; // 5 blocks from wall surface + 0.5 for wall center
+    let botPosNew, otherPosNew;
+
+    if (wallAxis === "x") {
+      // Wall along X → bots separated along Z
+      const botSide = botPosition.z < midZ ? -1 : 1;
+      botPosNew = new Vec3(midX, botPosition.y, midZ + botSide * halfDist);
+      otherPosNew = new Vec3(midX, otherBotPosition.y, midZ - botSide * halfDist);
+    } else {
+      // Wall along Z → bots separated along X
+      const botSide = botPosition.x < midX ? -1 : 1;
+      botPosNew = new Vec3(midX + botSide * halfDist, botPosition.y, midZ);
+      otherPosNew = new Vec3(midX - botSide * halfDist, otherBotPosition.y, midZ);
+    }
+
     return {
-      botPositionNew: botPosition,
-      otherBotPositionNew: otherBotPosition,
+      botPositionNew: botPosNew,
+      otherBotPositionNew: otherPosNew,
     };
   }
 
