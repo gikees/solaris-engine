@@ -46,38 +46,39 @@ function getOnWallWalkPhaseFn(
       const halfWidth = Math.floor(WALL_WIDTH / 2);
       const cx = wallCenter.x + 0.5;
       const cz = wallCenter.z + 0.5;
-      const distFromWall = 5.5;
+      const walkerDist = 5.5;
+      const observerDist = 7.5;
 
       let wp1x, wp1z, wp2x, wp2z, wp3x, wp3z;
 
       if (wallAxis === "x") {
         // Wall along X, bots separated along Z
-        // Walker starts at (cx, cz + side*distFromWall)
+        // Walker starts at (cx, cz + side*walkerDist)
         const walkerSide = episodeInstance._walkerSide; // +1 or -1 along Z
         const edgeOffset = goLeft ? -(halfWidth + 2) : halfWidth + 2;
 
         // WP1: past the wall edge, same Z as start
         wp1x = cx + edgeOffset;
-        wp1z = cz + walkerSide * distFromWall;
+        wp1z = cz + walkerSide * walkerDist;
         // WP2: same X as WP1, cross to other side of wall
         wp2x = cx + edgeOffset;
-        wp2z = cz - walkerSide * distFromWall;
-        // WP3: back to wall center on observer's side
+        wp2z = cz - walkerSide * observerDist;
+        // WP3: back to wall center on observer's side (at observer distance)
         wp3x = cx;
-        wp3z = cz - walkerSide * distFromWall;
+        wp3z = cz - walkerSide * observerDist;
       } else {
         // Wall along Z, bots separated along X
         const walkerSide = episodeInstance._walkerSide; // +1 or -1 along X
         const edgeOffset = goLeft ? -(halfWidth + 2) : halfWidth + 2;
 
         // WP1: past the wall edge, same X as start
-        wp1x = cx + walkerSide * distFromWall;
+        wp1x = cx + walkerSide * walkerDist;
         wp1z = cz + edgeOffset;
         // WP2: same Z as WP1, cross to other side of wall
-        wp2x = cx - walkerSide * distFromWall;
+        wp2x = cx - walkerSide * observerDist;
         wp2z = cz + edgeOffset;
-        // WP3: back to wall center on observer's side
-        wp3x = cx - walkerSide * distFromWall;
+        // WP3: back to wall center on observer's side (at observer distance)
+        wp3x = cx - walkerSide * observerDist;
         wp3z = cz;
       }
 
@@ -117,18 +118,7 @@ function getOnWallWalkPhaseFn(
         useEasing: false,
       });
     } else {
-      // Observer: stand still, face the wall center
-      const wallLookTarget = new Vec3(
-        wallCenter.x + 0.5,
-        wallCenter.y + 1,
-        wallCenter.z + 0.5,
-      );
-      await lookAtSmooth(
-        bot,
-        wallLookTarget,
-        CAMERA_SPEED_DEGREES_PER_SEC,
-        { randomized: false, useEasing: false },
-      );
+      // Observer: stand still, keep spawn orientation (facing wall)
     }
 
     // Wait for minimum ticks
@@ -173,8 +163,8 @@ function getOnWallWalkPhaseFn(
  */
 class WallWalkEvalEpisode extends BaseEpisode {
   static WORKS_IN_NON_FLAT_WORLD = false;
-  static INIT_MIN_BOTS_DISTANCE = 11;
-  static INIT_MAX_BOTS_DISTANCE = 11;
+  static INIT_MIN_BOTS_DISTANCE = 14;
+  static INIT_MAX_BOTS_DISTANCE = 14;
 
   async setupEpisode(
     bot,
@@ -262,24 +252,30 @@ class WallWalkEvalEpisode extends BaseEpisode {
       walk_direction: this._goLeft ? "left" : "right",
     };
 
-    // Place bots in a straight line through wall center, 5 blocks from wall surface
-    const distFromWall = 5.5; // 5 blocks from surface + 0.5 to wall block center
+    // Place bots in a straight line through wall center
+    // Walker: 5 blocks from wall surface, Observer: 7 blocks from wall surface
+    const walkerDist = 5.5; // 5 blocks + 0.5 to wall block center
+    const observerDist = 7.5; // 7 blocks + 0.5 to wall block center
     const cx = wallCenterX + 0.5; // center of the wall block
     const cz = wallCenterZ + 0.5;
     let botPosNew, otherPosNew;
 
+    // Each bot gets its own distance based on role
+    const botDist = this._isWalker ? walkerDist : observerDist;
+    const otherDist = this._isWalker ? observerDist : walkerDist;
+
     if (wallAxis === "x") {
       // Wall along X → bots separated along Z, both at wall center X
       const botSide = botPosition.z < midZ ? -1 : 1;
-      botPosNew = new Vec3(cx, botPosition.y, cz + botSide * distFromWall);
-      otherPosNew = new Vec3(cx, otherBotPosition.y, cz - botSide * distFromWall);
+      botPosNew = new Vec3(cx, botPosition.y, cz + botSide * botDist);
+      otherPosNew = new Vec3(cx, otherBotPosition.y, cz - botSide * otherDist);
       // Store walker's side for waypoint calculation
       this._walkerSide = this._isWalker ? botSide : -botSide;
     } else {
       // Wall along Z → bots separated along X, both at wall center Z
       const botSide = botPosition.x < midX ? -1 : 1;
-      botPosNew = new Vec3(cx + botSide * distFromWall, botPosition.y, cz);
-      otherPosNew = new Vec3(cx - botSide * distFromWall, otherBotPosition.y, cz);
+      botPosNew = new Vec3(cx + botSide * botDist, botPosition.y, cz);
+      otherPosNew = new Vec3(cx - botSide * otherDist, otherBotPosition.y, cz);
       // Store walker's side for waypoint calculation
       this._walkerSide = this._isWalker ? botSide : -botSide;
     }
