@@ -3,7 +3,6 @@ const {
   lookAtSmooth,
   sneak,
   stopAll,
-  horizontalDistanceTo,
 } = require("../../primitives/movement");
 const { BaseEpisode } = require("../base-episode");
 
@@ -11,6 +10,7 @@ const CAMERA_SPEED_DEGREES_PER_SEC = 30;
 const EPISODE_MIN_TICKS = 300;
 const WALL_WIDTH = 8;
 const WALL_HEIGHT = 3;
+const WALK_TICKS = 100;
 const WALK_TICK_INTERVAL = 2;
 
 function getOnWallWalkPhaseFn(
@@ -30,106 +30,61 @@ function getOnWallWalkPhaseFn(
       "wallWalkPhase beginning",
     );
 
-    const me = bot.entity.position;
-
-    // Pick which end of wall to walk toward
+    // Pick walk direction along wall (same for both bots via sharedBotRng)
     const goLeft = sharedBotRng() < 0.5;
 
     // Retrieve wall info stored during setupEpisode
     const wallAxis = episodeInstance._wallAxis;
-    const wallCenter = episodeInstance._wallCenter;
 
-    // Determine walk-to target: one end of the wall + a bit past it
-    let wallEndTarget;
-    const pastWallOffset = 3; // walk a few blocks past the wall end
+    // Compute walk direction vector along the wall axis
+    let walkDirX, walkDirZ;
     if (wallAxis === "x") {
-      const endX = goLeft
-        ? wallCenter.x - WALL_WIDTH / 2 - pastWallOffset
-        : wallCenter.x + WALL_WIDTH / 2 + pastWallOffset;
-      wallEndTarget = new Vec3(endX, me.y, me.z);
+      walkDirX = goLeft ? -1 : 1;
+      walkDirZ = 0;
     } else {
-      const endZ = goLeft
-        ? wallCenter.z - WALL_WIDTH / 2 - pastWallOffset
-        : wallCenter.z + WALL_WIDTH / 2 + pastWallOffset;
-      wallEndTarget = new Vec3(me.x, me.y, endZ);
+      walkDirX = 0;
+      walkDirZ = goLeft ? -1 : 1;
     }
 
-    // Record detour direction in metadata
-    episodeInstance._evalMetadata.detour_end = goLeft ? "left" : "right";
+    // Record direction in metadata
+    episodeInstance._evalMetadata.walk_direction = goLeft ? "left" : "right";
+    episodeInstance._evalMetadata.walk_ticks = WALK_TICKS;
 
     console.log(
-      `[${bot.username}] Wall walk: walking ${goLeft ? "left" : "right"} to ${wallEndTarget.x.toFixed(1)}, ${wallEndTarget.z.toFixed(1)}`,
+      `[${bot.username}] Wall walk: walking ${goLeft ? "left" : "right"} along ${wallAxis} axis for ${WALK_TICKS} ticks`,
     );
 
     // Sneak to signal evaluation start
     await sneak(bot);
     const startTick = bot.time.age;
 
-    // Phase 1: Turn to face parallel to wall (toward chosen end)
-    await lookAtSmooth(bot, wallEndTarget, CAMERA_SPEED_DEGREES_PER_SEC, {
+    // Phase 1: Turn parallel to wall (same world direction for both bots)
+    const me = bot.entity.position;
+    const walkTarget = me.offset(walkDirX * 10, 0, walkDirZ * 10);
+    await lookAtSmooth(bot, walkTarget, CAMERA_SPEED_DEGREES_PER_SEC, {
       randomized: false,
       useEasing: false,
     });
 
-    // Phase 2: Walk parallel to wall until past the wall end
-    const maxWalkTicks = 200;
-    let walkTicks = 0;
+    // Phase 2: Walk the length of the wall (fixed tick count)
     bot.setControlState("forward", true);
-    while (
-      horizontalDistanceTo(bot.entity.position, wallEndTarget) > 1.5 &&
-      walkTicks < maxWalkTicks
-    ) {
-      // Keep looking at the walk target
-      await lookAtSmooth(bot, wallEndTarget, 90, {
+    for (let i = 0; i < WALK_TICKS; i += WALK_TICK_INTERVAL) {
+      const currentPos = bot.entity.position;
+      const lookAhead = currentPos.offset(walkDirX * 10, 0, walkDirZ * 10);
+      await lookAtSmooth(bot, lookAhead, 90, {
         randomized: false,
         useEasing: false,
       });
       await bot.waitForTicks(WALK_TICK_INTERVAL);
-      walkTicks += WALK_TICK_INTERVAL;
     }
     stopAll(bot);
 
-    // Phase 3: Turn 90° toward other bot
+    // Phase 3: Turn back toward other bot's current position
     const otherEntity = bot.players[args.other_bot_name]?.entity;
     const currentOtherPos = otherEntity
       ? otherEntity.position
       : otherBotPosition;
-
-    await lookAtSmooth(
-      bot,
-      currentOtherPos,
-      CAMERA_SPEED_DEGREES_PER_SEC,
-      { randomized: false, useEasing: false },
-    );
-
-    // Phase 4: Walk toward the other bot briefly
-    const meetTarget = bot.entity.position.clone().add(
-      new Vec3(
-        (currentOtherPos.x - bot.entity.position.x) * 0.4,
-        0,
-        (currentOtherPos.z - bot.entity.position.z) * 0.4,
-      ),
-    );
-
-    bot.setControlState("forward", true);
-    const walkTowardTicks = 60; // walk for about 3 seconds
-    for (let i = 0; i < walkTowardTicks; i += WALK_TICK_INTERVAL) {
-      const otherNow = bot.players[args.other_bot_name]?.entity;
-      const lookTarget = otherNow ? otherNow.position : currentOtherPos;
-      await lookAtSmooth(bot, lookTarget, 90, {
-        randomized: false,
-        useEasing: false,
-      });
-      await bot.waitForTicks(WALK_TICK_INTERVAL);
-    }
-    stopAll(bot);
-
-    // Phase 5: Look at each other and wait
-    const otherFinal = bot.players[args.other_bot_name]?.entity;
-    const finalLookTarget = otherFinal
-      ? otherFinal.position
-      : currentOtherPos;
-    await lookAtSmooth(bot, finalLookTarget, CAMERA_SPEED_DEGREES_PER_SEC, {
+    await lookAtSmooth(bot, currentOtherPos, CAMERA_SPEED_DEGREES_PER_SEC, {
       randomized: false,
       useEasing: false,
     });
@@ -169,8 +124,8 @@ function getOnWallWalkPhaseFn(
 }
 
 /**
- * Eval episode where a wall is placed between bots and they walk around it to find each other;
- * used to evaluate occlusion and navigation prediction.
+ * Eval episode where a wall spawns between bots, they turn the same direction
+ * and walk parallel to the wall, then turn back to face each other.
  * @extends BaseEpisode
  */
 class WallWalkEvalEpisode extends BaseEpisode {
@@ -255,16 +210,10 @@ class WallWalkEvalEpisode extends BaseEpisode {
       wall_axis: wallAxis,
     };
 
-    // Both bots face the wall center so the wall is visible at episode start
-    const wallCenterPos = new Vec3(
-      wallCenterX + 0.5,
-      wallCenterY + 1,
-      wallCenterZ + 0.5,
-    );
-
+    // Bots face each other (through the wall) at episode start
     return {
       botPositionNew: botPosition,
-      otherBotPositionNew: wallCenterPos,
+      otherBotPositionNew: otherBotPosition,
     };
   }
 
