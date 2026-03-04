@@ -42,14 +42,14 @@ function getOnWallWalkPhaseFn(
     const startTick = bot.time.age;
 
     if (isWalker) {
-      // Walker: navigate around the wall via 3 waypoints
+      // Walker: navigate around the wall via 2 waypoints
       const halfWidth = Math.floor(WALL_WIDTH / 2);
       const cx = wallCenter.x + 0.5;
       const cz = wallCenter.z + 0.5;
       const walkerDist = 5.5;
       const observerDist = 7.5;
 
-      let wp1x, wp1z, wp2x, wp2z, wp3x, wp3z;
+      let wp1x, wp1z, wp2x, wp2z;
 
       if (wallAxis === "x") {
         // Wall along X, bots separated along Z
@@ -63,9 +63,6 @@ function getOnWallWalkPhaseFn(
         // WP2: same X as WP1, cross to other side of wall
         wp2x = cx + edgeOffset;
         wp2z = cz - walkerSide * observerDist;
-        // WP3: back to wall center on observer's side (at observer distance)
-        wp3x = cx;
-        wp3z = cz - walkerSide * observerDist;
       } else {
         // Wall along Z, bots separated along X
         const walkerSide = episodeInstance._walkerSide; // +1 or -1 along X
@@ -77,15 +74,11 @@ function getOnWallWalkPhaseFn(
         // WP2: same Z as WP1, cross to other side of wall
         wp2x = cx - walkerSide * observerDist;
         wp2z = cz + edgeOffset;
-        // WP3: back to wall center on observer's side (at observer distance)
-        wp3x = cx - walkerSide * observerDist;
-        wp3z = cz;
       }
 
       const waypoints = [
         { x: wp1x, z: wp1z, label: "WP1 (past edge)" },
         { x: wp2x, z: wp2z, label: "WP2 (cross sides)" },
-        { x: wp3x, z: wp3z, label: "WP3 (observer side)" },
       ];
 
       initializePathfinder(bot, { allowSprinting: false });
