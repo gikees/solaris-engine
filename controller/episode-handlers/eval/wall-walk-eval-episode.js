@@ -7,6 +7,7 @@ const {
   stopAll,
 } = require("../../primitives/movement");
 const { GoalXZ } = require("../../utils/bot-factory");
+const { rconTp } = require("../../utils/coordination");
 const { BaseEpisode } = require("../base-episode");
 
 const CAMERA_SPEED_DEGREES_PER_SEC = 30;
@@ -276,6 +277,9 @@ class WallWalkEvalEpisode extends BaseEpisode {
     console.log(
       `[${bot.username}] Role: ${this._isWalker ? "WALKER" : "OBSERVER"}, direction: ${this._goLeft ? "left" : "right"}`,
     );
+
+    // Teleport this bot to its new position
+    await rconTp(rcon, bot.username, botPosNew.x, botPosNew.y, botPosNew.z);
 
     return {
       botPositionNew: botPosNew,
