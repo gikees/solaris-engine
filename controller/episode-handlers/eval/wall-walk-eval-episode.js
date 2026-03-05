@@ -8,6 +8,7 @@ const {
 } = require("../../primitives/movement");
 const { GoalXZ } = require("../../utils/bot-factory");
 const { rconTp } = require("../../utils/coordination");
+const { sleep } = require("../../utils/helpers");
 const { BaseEpisode } = require("../base-episode");
 
 const CAMERA_SPEED_DEGREES_PER_SEC = 30;
@@ -48,7 +49,7 @@ function getOnWallWalkPhaseFn(
       const cx = wallCenter.x + 0.5;
       const cz = wallCenter.z + 0.5;
       const walkerDist = 5.5;
-      const crossDist = 2.5; // stop ~2 blocks past the wall
+      const crossDist = 1.5; // stop ~1 block past the wall
 
       let wp1x, wp1z, wp2x, wp2z;
 
@@ -278,8 +279,9 @@ class WallWalkEvalEpisode extends BaseEpisode {
       `[${bot.username}] Role: ${this._isWalker ? "WALKER" : "OBSERVER"}, direction: ${this._goLeft ? "left" : "right"}`,
     );
 
-    // Teleport this bot to its new position
+    // Teleport this bot to its new position and wait for server to update
     await rconTp(rcon, bot.username, botPosNew.x, botPosNew.y, botPosNew.z);
+    await sleep(1000);
 
     return {
       botPositionNew: botPosNew,
