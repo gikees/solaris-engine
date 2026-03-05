@@ -47,7 +47,7 @@ function getOnWallWalkPhaseFn(
       const cx = wallCenter.x + 0.5;
       const cz = wallCenter.z + 0.5;
       const walkerDist = 5.5;
-      const observerDist = 7.5;
+      const crossDist = 2.5; // stop ~2 blocks past the wall
 
       let wp1x, wp1z, wp2x, wp2z;
 
@@ -62,7 +62,7 @@ function getOnWallWalkPhaseFn(
         wp1z = cz + walkerSide * walkerDist;
         // WP2: same X as WP1, cross to other side of wall
         wp2x = cx + edgeOffset;
-        wp2z = cz - walkerSide * observerDist;
+        wp2z = cz - walkerSide * crossDist;
       } else {
         // Wall along Z, bots separated along X
         const walkerSide = episodeInstance._walkerSide; // +1 or -1 along X
@@ -72,7 +72,7 @@ function getOnWallWalkPhaseFn(
         wp1x = cx + walkerSide * walkerDist;
         wp1z = cz + edgeOffset;
         // WP2: same Z as WP1, cross to other side of wall
-        wp2x = cx - walkerSide * observerDist;
+        wp2x = cx - walkerSide * crossDist;
         wp2z = cz + edgeOffset;
       }
 
