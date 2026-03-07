@@ -1065,9 +1065,9 @@ function getOnStartRecordingFn(
  */
 async function checkBiomeAccepted(rcon, botUsername, acceptedBiomes) {
   for (const biome of acceptedBiomes) {
-    const cmd = `execute at ${botUsername} if biome ~ ~ ~ minecraft:${biome} run say biome_ok`;
+    const cmd = `execute at ${botUsername} if biome ~ ~ ~ minecraft:${biome}`;
     const result = await rcon.send(cmd);
-    if (!result.startsWith("Test failed")) {
+    if (result.startsWith("Test passed")) {
       return { accepted: true, biome };
     }
   }
