@@ -1218,14 +1218,10 @@ async function teleport(
           console.log(
             `[${bot.username}] Biome rejected at current location, retrying teleport`,
           );
-          if (attemptsWithThisRadius >= MAX_ATTEMPTS_WITH_THIS_RADIUS) {
-            console.log(
-              `[${bot.username}] biome check failed after ${attemptsWithThisRadius} attempts with radius ${bot._teleport_radius}, halving the radius and trying again`,
-            );
-            bot._teleport_radius /= 2;
-            attemptsWithThisRadius = 0;
-          }
-          await sleep(1000);
+          // Don't count biome rejections toward attemptsWithThisRadius —
+          // spreadplayers succeeded, we just need a different location.
+          // Use a longer sleep to avoid overwhelming the server with rapid teleports.
+          await sleep(3000);
           continue;
         }
         console.log(
