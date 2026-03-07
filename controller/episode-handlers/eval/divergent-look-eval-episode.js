@@ -73,6 +73,13 @@ class DivergentLookEvalEpisode extends BaseEpisode {
   static WORKS_IN_NON_FLAT_WORLD = true;
   static INIT_MIN_BOTS_DISTANCE = 10;
   static INIT_MAX_BOTS_DISTANCE = 12;
+  static ACCEPTED_BIOMES = [
+    "desert", "badlands", "eroded_badlands", "wooded_badlands",
+    "snowy_plains", "snowy_taiga", "snowy_beach", "snowy_slopes",
+    "frozen_peaks", "ice_spikes", "frozen_river",
+    "savanna", "savanna_plateau", "windswept_savanna",
+    "swamp", "mangrove_swamp", "cherry_grove", "mushroom_fields",
+  ];
 
   async setupEpisode(
     bot,

@@ -1056,6 +1056,25 @@ function getOnStartRecordingFn(
 }
 
 /**
+ * Check whether the bot is in one of the accepted biomes.
+ *
+ * @param {*} rcon - RCON connection instance.
+ * @param {string} botUsername - Bot username for the `execute at` command.
+ * @param {string[]} acceptedBiomes - List of Minecraft biome IDs (without namespace).
+ * @returns {Promise<{accepted: boolean, biome: string|null}>}
+ */
+async function checkBiomeAccepted(rcon, botUsername, acceptedBiomes) {
+  for (const biome of acceptedBiomes) {
+    const cmd = `execute at ${botUsername} if biome ~ ~ ~ minecraft:${biome} run say biome_ok`;
+    const result = await rcon.send(cmd);
+    if (!result.startsWith("Test failed")) {
+      return { accepted: true, biome };
+    }
+  }
+  return { accepted: false, biome: null };
+}
+
+/**
  * Teleport both bots to a randomized location (or episode-specific fixed points).
  *
  * Uses `spreadplayers` to place both bots within the configured distance bounds.
@@ -1187,6 +1206,32 @@ async function teleport(
       }
       await sleep(1000);
     } else {
+      // Check biome filtering if the episode defines ACCEPTED_BIOMES
+      const acceptedBiomes = episodeInstance.constructor.ACCEPTED_BIOMES;
+      if (acceptedBiomes && args.world_type !== "flat") {
+        const { accepted, biome } = await checkBiomeAccepted(
+          rcon,
+          bot.username,
+          acceptedBiomes,
+        );
+        if (!accepted) {
+          console.log(
+            `[${bot.username}] Biome rejected at current location, retrying teleport`,
+          );
+          if (attemptsWithThisRadius >= MAX_ATTEMPTS_WITH_THIS_RADIUS) {
+            console.log(
+              `[${bot.username}] biome check failed after ${attemptsWithThisRadius} attempts with radius ${bot._teleport_radius}, halving the radius and trying again`,
+            );
+            bot._teleport_radius /= 2;
+            attemptsWithThisRadius = 0;
+          }
+          await sleep(1000);
+          continue;
+        }
+        console.log(
+          `[${bot.username}] Biome accepted: ${biome}`,
+        );
+      }
       success = true;
       await sleep(5000);
       break;
