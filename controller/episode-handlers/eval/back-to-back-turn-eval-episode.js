@@ -1,4 +1,3 @@
-const { Vec3 } = require("vec3");
 const {
   lookAtSmooth,
   sneak,
@@ -8,6 +7,7 @@ const { BaseEpisode } = require("../base-episode");
 const EPISODE_MIN_TICKS = 300;
 const MIN_TURN_SPEED = 20;
 const MAX_TURN_SPEED = 40;
+const MIN_OFFSET = Math.PI / 3; // 60° — keeps other bot out of FOV (54° half-FOV + 6° margin)
 
 function getOnBackToBackTurnPhaseFn(
   bot,
@@ -35,42 +35,32 @@ function getOnBackToBackTurnPhaseFn(
     const isAlpha = bot.username < args.other_bot_name;
     const mySpeed = isAlpha ? speedAlpha : speedBravo;
 
+    // Compute actual turn angle from current yaw to the other bot
+    const dx = otherBotPosition.x - bot.entity.position.x;
+    const dz = otherBotPosition.z - bot.entity.position.z;
+    const targetYaw = Math.atan2(-dx, -dz);
+    let turnAngle = targetYaw - bot.entity.yaw;
+    turnAngle = ((turnAngle + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
+    const turnDegrees = Math.abs(turnAngle) * (180 / Math.PI);
+
     episodeInstance._evalMetadata = {
+      yaw_alpha_start: episodeInstance._yawAlpha,
+      yaw_bravo_start: episodeInstance._yawBravo,
       camera_speed_alpha: speedAlpha,
       camera_speed_bravo: speedBravo,
-      turn_degrees: 180,
+      turn_degrees: Math.round(turnDegrees * 10) / 10,
     };
 
     console.log(
-      `[${bot.username}] Back-to-back turn: turning 180° at ${mySpeed.toFixed(1)}°/sec`,
+      `[${bot.username}] Back-to-back turn: turning ${turnDegrees.toFixed(1)}° at ${mySpeed.toFixed(1)}°/sec`,
     );
 
     // Sneak to signal evaluation start
     await sneak(bot);
     const startTick = bot.time.age;
 
-    // Turn 180° to face the other bot.
-    // Since bots face exactly opposite, lookAtSmooth could pick either rotation direction.
-    // Add a small yaw epsilon to force a consistent direction.
-    const epsilonDir = sharedBotRng() < 0.5 ? 1 : -1;
-    const epsilon = epsilonDir * 0.01; // tiny yaw offset in radians
-
-    // Offset the target slightly sideways to break the 180° ambiguity
-    const dx = otherBotPosition.x - bot.entity.position.x;
-    const dz = otherBotPosition.z - bot.entity.position.z;
-    const mag = Math.sqrt(dx * dx + dz * dz) || 1;
-    const nx = dx / mag;
-    const nz = dz / mag;
-    // Perpendicular vector
-    const perpX = -nz;
-    const perpZ = nx;
-    const nudgedTarget = new Vec3(
-      otherBotPosition.x + perpX * epsilon,
-      otherBotPosition.y,
-      otherBotPosition.z + perpZ * epsilon,
-    );
-
-    await lookAtSmooth(bot, nudgedTarget, mySpeed, {
+    // Turn to face the other bot (no epsilon needed — randomized angles won't be exactly 180°)
+    await lookAtSmooth(bot, otherBotPosition, mySpeed, {
       randomized: false,
       useEasing: false,
     });
@@ -110,8 +100,9 @@ function getOnBackToBackTurnPhaseFn(
 }
 
 /**
- * Eval episode where bots start back-to-back (facing away) and slowly turn 180° to face each other
- * at different speeds; used to evaluate turning prediction with asymmetric rotation.
+ * Eval episode where bots start facing random directions away from each other (at least 60° off
+ * the toward-other-bot axis) and turn to face each other at different speeds; used to evaluate
+ * turning prediction with varied starting orientations and asymmetric rotation.
  * @extends BaseEpisode
  */
 class BackToBackTurnEvalEpisode extends BaseEpisode {
@@ -129,20 +120,44 @@ class BackToBackTurnEvalEpisode extends BaseEpisode {
     botPosition,
     otherBotPosition,
   ) {
-    // Return a point BEHIND the bot (opposite direction from other bot).
-    // The framework will auto-orient the bot to face away from the other bot.
-    const dx = otherBotPosition.x - botPosition.x;
-    const dz = otherBotPosition.z - botPosition.z;
-    const mag = Math.sqrt(dx * dx + dz * dz) || 1;
-    const nx = dx / mag;
-    const nz = dz / mag;
+    // Direction toward the other bot (Minecraft yaw convention)
+    const dxToOther = otherBotPosition.x - botPosition.x;
+    const dzToOther = otherBotPosition.z - botPosition.z;
+    const towardOther = Math.atan2(-dxToOther, -dzToOther);
 
-    // Point behind: opposite direction
-    const behindTarget = botPosition.offset(-nx * 10, 0, -nz * 10);
+    // Sample two random offsets from the valid arc [MIN_OFFSET, 2π - MIN_OFFSET].
+    // This keeps the other bot at least 60° outside each bot's FOV.
+    const offset1 =
+      MIN_OFFSET + sharedBotRng() * (2 * Math.PI - 2 * MIN_OFFSET);
+    const offset2 =
+      MIN_OFFSET + sharedBotRng() * (2 * Math.PI - 2 * MIN_OFFSET);
+
+    // Assign offsets deterministically by name sorting
+    const isAlpha = bot.username < args.other_bot_name;
+    const myOffset = isAlpha ? offset1 : offset2;
+
+    // Compute randomized yaw for this bot, wrapped to [-π, π]
+    let myYaw = towardOther + myOffset;
+    myYaw = ((myYaw + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
+
+    // Compute the other bot's yaw (its towardOther is reversed by π)
+    const otherOffset = isAlpha ? offset2 : offset1;
+    let otherYaw = towardOther + Math.PI + otherOffset;
+    otherYaw = ((otherYaw + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
+
+    // Store yaw values on instance for the phase handler to set metadata
+    this._yawAlpha = isAlpha ? myYaw : otherYaw;
+    this._yawBravo = isAlpha ? otherYaw : myYaw;
+
+    // Compute fake target 10 blocks in the assigned yaw direction.
+    // Minecraft: yaw = atan2(-dx, -dz), so dx = -sin(yaw), dz = -cos(yaw)
+    const dx = -Math.sin(myYaw);
+    const dz = -Math.cos(myYaw);
+    const fakeTarget = botPosition.offset(dx * 10, 0, dz * 10);
 
     return {
       botPositionNew: botPosition,
-      otherBotPositionNew: behindTarget,
+      otherBotPositionNew: fakeTarget,
     };
   }
 
