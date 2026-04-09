@@ -79,6 +79,20 @@ def generate_terrain_settings(biome, surface_block):
     return terrain_settings
 
 
+def parse_gpu_device_id(value: str) -> int:
+    try:
+        gpu_device_id = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"Invalid GPU device id '{value}' in --gpu-device-id"
+        ) from exc
+
+    if gpu_device_id < 0:
+        raise argparse.ArgumentTypeError("--gpu-device-id cannot be negative")
+
+    return gpu_device_id
+
+
 def generate_compose_config(
     instance_id,
     base_port,
@@ -721,6 +735,12 @@ def main():
         choices=["egl", "x11", "auto"],
         help="GPU rendering mode: egl (headless), x11 (requires host X), auto (default: egl)",
     )
+    parser.add_argument(
+        "--gpu-device-id",
+        type=parse_gpu_device_id,
+        default=0,
+        help="Single GPU id to use for camera containers (default: 0; non-zero values are experimental)",
+    )
 
     args = parser.parse_args()
     # Ensure required dirs are absolute
@@ -759,22 +779,29 @@ def main():
         total_instances = args.instances
         world_plan = ["normal"] * total_instances
 
-    # GPU configuration validation
-    gpu_count = 1
+    selected_gpu_id = args.gpu_device_id
 
     # GPU configuration summary
+    gpu_count = 1
     print(f"GPU rendering enabled: {gpu_count} GPUs available, mode={args.gpu_mode}")
-    print(f"  Instances will be distributed round-robin across GPUs")
-    print(f"  ! Due to a known NVIDIA driver bug, only GPU 0 can be used for now. See Docs->Known Issue(s) for details")
-    print(f"  ! https://solaris-wm.github.io/solaris-engine/getting_started.html#known-issue-s")
+    print(
+        "  ! Due to a known NVIDIA driver bug, only GPU 0 can be used for now. "
+        "See Docs->Known Issue(s) for details"
+    )
+    print(
+        "  ! https://solaris-wm.github.io/solaris-engine/getting_started.html#known-issue-s"
+    )
+    if selected_gpu_id != 0:
+        print(
+            f"  ! Experimental override enabled: using GPU {selected_gpu_id} instead of GPU 0."
+        )
     for i in range(total_instances):
-        gpu_id = i % gpu_count
-        print(f"    Instance {i}: GPU {gpu_id}")
+        print(f"    Instance {i}: GPU {selected_gpu_id}")
 
     if total_instances > 4:
         raise ValueError(
             f"total_instances={total_instances} exceeds the NVENC limit of 8 "
-            f"simultaneous encoding sessions per GPU. "
+            f"simultaneous encoding sessions on the selected GPU {selected_gpu_id}. "
             f"Please reduce the number of total instances to 4 or fewer."
         )
 
@@ -788,7 +815,7 @@ def main():
         camera_bravo_cpuset = None
 
         # Calculate GPU assignment for this instance (round-robin across available GPUs)
-        gpu_device_id = i % gpu_count
+        gpu_device_id = selected_gpu_id
 
         config = generate_compose_config(
             i,
