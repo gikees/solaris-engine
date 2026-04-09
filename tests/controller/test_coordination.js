@@ -142,6 +142,20 @@ describe("syncBots N-party barrier", () => {
     // Should not hang
     await coord.syncBots(1);
   });
+
+  it("resolves when peer acks arrive before syncBots is called (race condition)", async () => {
+    // Simulates the real-world case: peer finishes and broadcasts syncBots
+    // before this bot has called syncBots() and registered its listener.
+    const coord = makeCoordinator("Alpha", ["Alpha", "Bravo", "Charlie"]);
+    const ep = 5;
+
+    // Peer messages arrive via _handleMessage BEFORE syncBots() is called.
+    coord._handleMessage({ eventName: `episode_${ep}_syncBots`, eventParams: {}, from: "Bravo" });
+    coord._handleMessage({ eventName: `episode_${ep}_syncBots`, eventParams: {}, from: "Charlie" });
+
+    // syncBots() should drain the buffer and resolve immediately.
+    await coord.syncBots(ep);
+  });
 });
 
 describe("collectPeerPhaseData / onceEvent aggregation", () => {
@@ -163,6 +177,58 @@ describe("collectPeerPhaseData / onceEvent aggregation", () => {
     const { eventParams, from } = await seen;
     assert.deepEqual(eventParams, { reason: "boom" });
     assert.equal(from, "Charlie");
+  });
+
+  it("onceEvent consumes an early buffered message", async () => {
+    const coord = makeCoordinator("Alpha", ["Alpha", "Bravo", "Charlie"]);
+    const ep = 7;
+
+    coord._handleMessage({
+      eventName: `episode_${ep}_stoppedPhase`,
+      eventParams: { position: { x: 1 } },
+      from: "Bravo",
+    });
+
+    const seen = new Promise((resolve) => {
+      coord.onceEvent("stoppedPhase", ep, (eventParams, from) => {
+        resolve({ eventParams, from });
+      });
+    });
+
+    const { eventParams, from } = await seen;
+    assert.deepEqual(eventParams, { position: { x: 1 } });
+    assert.equal(from, "Bravo");
+  });
+
+  it("onceEvent preserves first-sender semantics for buffered messages", async () => {
+    const coord = makeCoordinator("Alpha", ["Alpha", "Bravo", "Charlie"]);
+    const ep = 7;
+
+    coord._handleMessage({
+      eventName: `episode_${ep}_peerErrorPhase`,
+      eventParams: { reason: "first" },
+      from: "Charlie",
+    });
+    coord._handleMessage({
+      eventName: `episode_${ep}_peerErrorPhase`,
+      eventParams: { reason: "second" },
+      from: "Bravo",
+    });
+
+    const seen = new Promise((resolve) => {
+      coord.onceEvent("peerErrorPhase", ep, (eventParams, from) => {
+        resolve({ eventParams, from });
+      });
+    });
+
+    const { eventParams, from } = await seen;
+    assert.deepEqual(eventParams, { reason: "first" });
+    assert.equal(from, "Charlie");
+    assert.equal(
+      coord.messageBuffer.has(`episode_${ep}_peerErrorPhase`),
+      false,
+      "stale buffered messages should be cleared after onceEvent consumes one",
+    );
   });
 
   it("collectPeerPhaseData resolves with a sender-keyed map", async () => {

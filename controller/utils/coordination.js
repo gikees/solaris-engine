@@ -75,6 +75,13 @@ class BotCoordinator extends EventEmitter {
     this.server = null;
     this.executingEvents = new Map();
     this.eventCounter = 0;
+    this.messageBuffer = new Map(); // eventName -> [{eventParams, from}]
+  }
+
+  _takeBufferedMessages(eventName) {
+    const buffered = this.messageBuffer.get(eventName) ?? [];
+    this.messageBuffer.delete(eventName);
+    return buffered;
   }
 
   _extractSender(eventParams, fromArg) {
@@ -211,12 +218,19 @@ class BotCoordinator extends EventEmitter {
 
   _handleMessage(msg) {
     if (!msg.eventName) return;
-    const listenerCount = this.listenerCount(msg.eventName);
-    if (listenerCount > 0) {
+    if (this.listenerCount(msg.eventName) > 0) {
       this.emit(msg.eventName, msg.eventParams, msg.from ?? null);
     } else {
+      // Buffer the message so it can be replayed when a listener registers.
+      if (!this.messageBuffer.has(msg.eventName)) {
+        this.messageBuffer.set(msg.eventName, []);
+      }
+      this.messageBuffer.get(msg.eventName).push({
+        eventParams: msg.eventParams,
+        from: msg.from ?? null,
+      });
       console.log(
-        `[${this.botName}] Received: ${msg.eventName} (no listeners)`,
+        `[${this.botName}] Buffered: ${msg.eventName} (no listeners yet)`,
       );
     }
   }
@@ -277,8 +291,10 @@ class BotCoordinator extends EventEmitter {
           return;
         }
 
-        peerPhaseDataByName[from] = eventParams;
-        receivedFrom.add(from);
+        if (!receivedFrom.has(from)) {
+          peerPhaseDataByName[from] = eventParams;
+          receivedFrom.add(from);
+        }
 
         if (receivedFrom.size >= needed) {
           this.removeListener(fullEventName, listener);
@@ -287,6 +303,14 @@ class BotCoordinator extends EventEmitter {
       };
 
       this.on(fullEventName, listener);
+
+      // Drain any messages that arrived before this listener was registered.
+      const buffered = this._takeBufferedMessages(fullEventName);
+      if (buffered.length > 0) {
+        for (const { eventParams, from } of buffered) {
+          listener(eventParams, from);
+        }
+      }
     });
   }
 
@@ -305,6 +329,14 @@ class BotCoordinator extends EventEmitter {
     };
 
     this.once(fullEventName, wrappedHandler);
+
+    // Deliver the earliest buffered message if this event already arrived
+    // before listener registration; onceEvent keeps first-sender semantics.
+    const buffered = this._takeBufferedMessages(fullEventName);
+    if (buffered.length > 0) {
+      const [{ eventParams, from }] = buffered;
+      this.emit(fullEventName, eventParams, from);
+    }
   }
 
   onceEventFromAllPeers(eventName, episodeNum, handler) {
