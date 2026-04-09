@@ -20,7 +20,7 @@ async function main() {
 
   console.log(`Starting bot: ${args.bot_name}`);
   console.log(
-    `Coordinator: ${args.bot_name}, Ports: ${args.coord_port}/${args.other_coord_port}`,
+    `Players: [${args.player_names.join(", ")}], COORD_PORT: ${args.coord_port}`,
   );
   console.log(
     `[${args.bot_name}] Waiting ${args.bootstrap_wait_time} seconds before creating bot...`,
@@ -37,12 +37,12 @@ async function main() {
     version: args.mc_version,
   });
 
-  // Initialize shared RNG and coordinator
+  // Initialize coordinator with full mesh peer list
   const coordinator = new BotCoordinator(
     args.bot_name,
+    args.player_names,
     args.coord_port,
-    args.other_coord_host,
-    args.other_coord_port,
+    args.peer_endpoints,
   );
 
   // Set up spawn event handler
