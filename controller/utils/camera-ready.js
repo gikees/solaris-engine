@@ -72,13 +72,17 @@ function extractPlayers(listResponse) {
 }
 
 /**
- * Wait for both camera clients to join the Minecraft server
+ * Wait for all camera clients to join the Minecraft server.
+ *
  * @param {string} rconHost - RCON server host
  * @param {number} rconPort - RCON server port
  * @param {string} rconPassword - RCON password
  * @param {number} maxRetries - Maximum number of retry attempts
  * @param {number} checkInterval - Milliseconds between checks
- * @returns {Promise<boolean>} True if both cameras found, false if timeout
+ * @param {string[]} [cameraNames] - Camera bot names to wait for.
+ *   Defaults to ["CameraAlpha", "CameraBravo"] for backwards compatibility.
+ * @param {function} [_queryFn] - Internal: override RCON query (for testing)
+ * @returns {Promise<boolean>} True if all cameras found, false if timeout
  */
 async function waitForCameras(
   rconHost,
@@ -86,19 +90,23 @@ async function waitForCameras(
   rconPassword,
   maxRetries,
   checkInterval,
+  cameraNames,
+  _queryFn,
 ) {
-  const cameraNames = ["CameraAlpha", "CameraBravo"];
+  cameraNames = cameraNames ?? ["CameraAlpha", "CameraBravo"];
 
   console.log(`[camera-ready] Waiting for cameras: ${cameraNames.join(", ")}`);
   console.log(
     `[camera-ready] Max retries: ${maxRetries}, check interval: ${checkInterval}ms`,
   );
 
+  const queryPlayers = _queryFn
+    ? _queryFn
+    : () => useRcon(rconHost, rconPort, rconPassword, (rcon) => rcon.send("list"));
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const list = await useRcon(rconHost, rconPort, rconPassword, (rcon) =>
-        rcon.send("list"),
-      );
+      const list = await queryPlayers();
       const players = extractPlayers(list);
 
       const foundCameras = cameraNames.filter((name) => players.has(name));

@@ -7,6 +7,7 @@ const seedrandom = require("seedrandom");
 
 const { sleep } = require("./utils/helpers");
 const { waitForCameras } = require("./utils/camera-ready");
+const { buildCameraNames } = require("./config/player-utils");
 const { DEFAULT_CAMERA_SPEED_DEGREES_PER_SEC } = require("./utils/constants");
 const {
   directTeleport,
@@ -375,7 +376,7 @@ async function runSingleEpisode(
       position: bot.entity.position.clone(),
     };
 
-    coordinator.onceEvent(
+    coordinator.onceEventFromAllPeers(
       "teleportPhase",
       episodeNum,
       getOnTeleportPhaseFn(
@@ -624,6 +625,7 @@ function getOnSpawnFn(bot, host, actRecorderPort, coordinator, args) {
         args.rcon_password,
         args.camera_ready_retries,
         args.camera_ready_check_interval,
+        buildCameraNames(args.player_names),
       );
 
       if (!camerasReady) {
@@ -840,7 +842,7 @@ function getOnTeleportPhaseFn(
       );
     }
 
-    coordinator.onceEvent(
+    coordinator.onceEventFromAllPeers(
       "postTeleportPhase",
       episodeNum,
       getOnPostTeleportPhaseFn(
@@ -899,7 +901,7 @@ function getOnPostTeleportPhaseFn(
       )}`,
     );
 
-    coordinator.onceEvent(
+    coordinator.onceEventFromAllPeers(
       "setupEpisodePhase",
       episodeNum,
       getOnSetupEpisodeFn(
@@ -981,7 +983,7 @@ function getOnSetupEpisodeFn(
     await sleep(1000);
 
     // Call the entry point method
-    coordinator.onceEvent(
+    coordinator.onceEventFromAllPeers(
       "startRecordingPhase",
       episodeNum,
       getOnStartRecordingFn(
