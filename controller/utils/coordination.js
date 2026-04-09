@@ -329,9 +329,15 @@ class BotCoordinator extends EventEmitter {
     };
 
     this.once(fullEventName, wrappedHandler);
+  }
+
+  onceBufferedEvent(eventName, episodeNum, handler) {
+    const fullEventName = getEventName(eventName, episodeNum);
+    this.onceEvent(eventName, episodeNum, handler);
 
     // Deliver the earliest buffered message if this event already arrived
-    // before listener registration; onceEvent keeps first-sender semantics.
+    // before listener registration. This helper should only be used for
+    // known late-registered events such as stoppedPhase.
     const buffered = this._takeBufferedMessages(fullEventName);
     if (buffered.length > 0) {
       const [{ eventParams, from }] = buffered;

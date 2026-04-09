@@ -116,7 +116,7 @@ class BaseEpisode {
 
       // Wait for the connection to actually close
 
-      coordinator.onceEvent(
+      coordinator.onceBufferedEvent(
         "stoppedPhase",
         episodeNum,
         this.getOnStoppedPhaseFn(

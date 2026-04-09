@@ -179,7 +179,42 @@ describe("collectPeerPhaseData / onceEvent aggregation", () => {
     assert.equal(from, "Charlie");
   });
 
-  it("onceEvent consumes an early buffered message", async () => {
+  it("onceEvent does not consume an early buffered message", async () => {
+    const coord = makeCoordinator("Alpha", ["Alpha", "Bravo", "Charlie"]);
+    const ep = 7;
+    let resolved = false;
+
+    coord._handleMessage({
+      eventName: `episode_${ep}_stoppedPhase`,
+      eventParams: { position: { x: 1 } },
+      from: "Bravo",
+    });
+
+    const seen = new Promise((resolve) => {
+      coord.onceEvent("stoppedPhase", ep, (eventParams, from) => {
+        resolved = true;
+        resolve({ eventParams, from });
+      });
+    });
+
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(
+      resolved,
+      false,
+      "plain onceEvent should not replay buffered messages",
+    );
+
+    coord.emit(
+      `episode_${ep}_stoppedPhase`,
+      { position: { x: 2 } },
+      "Charlie",
+    );
+    const { eventParams, from } = await seen;
+    assert.deepEqual(eventParams, { position: { x: 2 } });
+    assert.equal(from, "Charlie");
+  });
+
+  it("onceBufferedEvent consumes an early buffered message", async () => {
     const coord = makeCoordinator("Alpha", ["Alpha", "Bravo", "Charlie"]);
     const ep = 7;
 
@@ -190,7 +225,7 @@ describe("collectPeerPhaseData / onceEvent aggregation", () => {
     });
 
     const seen = new Promise((resolve) => {
-      coord.onceEvent("stoppedPhase", ep, (eventParams, from) => {
+      coord.onceBufferedEvent("stoppedPhase", ep, (eventParams, from) => {
         resolve({ eventParams, from });
       });
     });
@@ -200,7 +235,7 @@ describe("collectPeerPhaseData / onceEvent aggregation", () => {
     assert.equal(from, "Bravo");
   });
 
-  it("onceEvent preserves first-sender semantics for buffered messages", async () => {
+  it("onceBufferedEvent preserves first-sender semantics for buffered messages", async () => {
     const coord = makeCoordinator("Alpha", ["Alpha", "Bravo", "Charlie"]);
     const ep = 7;
 
@@ -216,7 +251,7 @@ describe("collectPeerPhaseData / onceEvent aggregation", () => {
     });
 
     const seen = new Promise((resolve) => {
-      coord.onceEvent("peerErrorPhase", ep, (eventParams, from) => {
+      coord.onceBufferedEvent("peerErrorPhase", ep, (eventParams, from) => {
         resolve({ eventParams, from });
       });
     });
@@ -227,7 +262,7 @@ describe("collectPeerPhaseData / onceEvent aggregation", () => {
     assert.equal(
       coord.messageBuffer.has(`episode_${ep}_peerErrorPhase`),
       false,
-      "stale buffered messages should be cleared after onceEvent consumes one",
+      "stale buffered messages should be cleared after onceBufferedEvent consumes one",
     );
   });
 
