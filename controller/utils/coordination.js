@@ -1,17 +1,22 @@
 const EventEmitter = require("events");
 const net = require("net");
+const {
+  decidePrimaryBot: _decidePrimaryBotNew,
+} = require("../config/player-utils");
 
 function pickRandom(array, sharedBotRng) {
   const sortedArray = array.slice().sort();
   return sortedArray[Math.floor(sharedBotRng() * sortedArray.length)];
 }
 
+/**
+ * Determines whether this bot is the primary bot for the current episode.
+ * Uses args.player_names when available (N-player), falls back to the legacy
+ * 2-player pair for callers that haven't migrated yet.
+ */
 function decidePrimaryBot(bot, sharedBotRng, args) {
-  const primaryBotName = pickRandom(
-    [bot.username, args.other_bot_name],
-    sharedBotRng,
-  );
-  return bot.username === primaryBotName;
+  const allNames = args.player_names ?? [bot.username, args.other_bot_name];
+  return _decidePrimaryBotNew(allNames, bot.username, sharedBotRng);
 }
 /**
  * RCON teleportation function

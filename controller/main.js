@@ -37,12 +37,25 @@ async function main() {
     version: args.mc_version,
   });
 
-  // Initialize coordinator with full mesh peer list
+  if (args.peer_names.length > 1) {
+    throw new Error(
+      `Legacy BotCoordinator supports only one peer during Step 1; ${args.bot_name} was configured with peers [${args.peer_names.join(", ")}]. Complete Step 2 before running >2-player controller configs.`,
+    );
+  }
+
+  // Derive first-peer host/port from peer_endpoints for the current 2-party
+  // BotCoordinator shape. Step 2 will replace this with full-mesh coordination.
+  const firstPeerName = args.peer_names[0];
+  const firstPeer = firstPeerName ? args.peer_endpoints[firstPeerName] : null;
+  const otherCoordHost = firstPeer?.host || args.other_coord_host || "127.0.0.1";
+  const otherCoordPort =
+    firstPeer?.port || Number(args.other_coord_port || 8094);
+
   const coordinator = new BotCoordinator(
     args.bot_name,
-    args.player_names,
     args.coord_port,
-    args.peer_endpoints,
+    otherCoordHost,
+    otherCoordPort,
   );
 
   // Set up spawn event handler
