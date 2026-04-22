@@ -29,7 +29,7 @@ BASE_DATA_COLLECTION_DIR=$BASE_DATA_DIR/data_collection/eval
 EVAL_TIME_SET_DAY=${EVAL_TIME_SET_DAY:-1}
 
 # New pose-evaluation episode types
-EVAL_TYPES=("divergentLookEval" "backToBackTurnEval" "blindTurnEval" "parallelTurnEval" "wallWalkEval")
+EVAL_TYPES=("divergentLookEval" "backToBackTurnEval" "blindTurnEval" "parallelTurnEval" "wallWalkEval" "wallOcclusionEval")
 
 for BATCH_NAME in "${EVAL_TYPES[@]}"; do
     echo "=========================================="

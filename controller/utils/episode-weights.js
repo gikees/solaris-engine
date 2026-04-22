@@ -27,6 +27,7 @@ const episodeTypicalLengths = {
   blindTurnEval: 60,
   parallelTurnEval: 60,
   wallWalkEval: 60,
+  wallOcclusionEval: 60,
 };
 
 /**

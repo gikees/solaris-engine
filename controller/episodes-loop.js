@@ -77,6 +77,9 @@ const {
 const {
   WallWalkEvalEpisode,
 } = require("./episode-handlers/eval/wall-walk-eval-episode");
+const {
+  WallOcclusionEvalEpisode,
+} = require("./episode-handlers/eval/wall-occlusion-eval-episode");
 const turnToLookEvalTpPoints = require("./episode-handlers/eval/turn-to-look-eval-episode-tp-points.json");
 
 /**
@@ -112,6 +115,7 @@ const episodeClassMap = {
   blindTurnEval: BlindTurnEvalEpisode,
   parallelTurnEval: ParallelTurnEvalEpisode,
   wallWalkEval: WallWalkEvalEpisode,
+  wallOcclusionEval: WallOcclusionEvalEpisode,
 };
 
 /**
@@ -132,6 +136,7 @@ const evalEpisodeClasses = [
   BlindTurnEvalEpisode,
   ParallelTurnEvalEpisode,
   WallWalkEvalEpisode,
+  WallOcclusionEvalEpisode,
 ];
 
 /**
@@ -179,6 +184,7 @@ const defaultEpisodeTypes = [
   "blindTurnEval",
   "parallelTurnEval",
   "wallWalkEval",
+  "wallOcclusionEval",
 ];
 
 const isCustomEpisodeTypes =
