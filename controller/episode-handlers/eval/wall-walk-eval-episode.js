@@ -9,6 +9,10 @@ const {
 const { GoalXZ } = require("../../utils/bot-factory");
 const { rconTp } = require("../../utils/coordination");
 const { sleep } = require("../../utils/helpers");
+const {
+  hideNameTags,
+  restoreNameTags,
+} = require("../../utils/name-tag-visibility");
 const { BaseEpisode } = require("../base-episode");
 
 const CAMERA_SPEED_DEGREES_PER_SEC = 30;
@@ -236,6 +240,10 @@ class WallWalkEvalEpisode extends BaseEpisode {
       const fillCmd = `fill ${x1} ${y1} ${z1} ${x2} ${y2} ${z2} stone`;
       const fillRes = await rcon.send(fillCmd);
       console.log(`[${bot.username}] Wall fill result: ${fillRes}`);
+
+      // Hide name tags so the wall genuinely occludes the observer.
+      // Without this the floating tag renders through the wall.
+      await hideNameTags(rcon, [bot.username, args.other_bot_name]);
     }
 
     this._evalMetadata = {
@@ -290,7 +298,7 @@ class WallWalkEvalEpisode extends BaseEpisode {
   }
 
   async tearDownEpisode(bot, rcon, sharedBotRng, coordinator, episodeNum, args) {
-    // Only the lead bot removes the wall
+    // Only the lead bot removes the wall and restores name tags
     if (this._isLeadBot && this._fillCoords) {
       const { x1, y1, z1, x2, y2, z2 } = this._fillCoords;
       console.log(
@@ -303,6 +311,7 @@ class WallWalkEvalEpisode extends BaseEpisode {
       } catch (err) {
         console.error(`[${bot.username}] Failed to clear wall:`, err);
       }
+      await restoreNameTags(rcon);
     }
   }
 
