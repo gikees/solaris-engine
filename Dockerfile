@@ -32,7 +32,7 @@ COPY requirements-docker.txt ./
 RUN python -m pip install --upgrade pip setuptools wheel && \
     python -m pip install --no-cache-dir -r requirements-docker.txt
 COPY package.json ./
-RUN npm install 
+RUN npm install
 RUN npm i rcon-client
 # These echo numbers are needed to trigger a rebuild of this image in the case a downstream dependency has changed.
 RUN echo 1 && npm install github:georgysavva/mineflayer

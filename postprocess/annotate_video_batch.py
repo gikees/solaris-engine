@@ -85,6 +85,142 @@ def radians_per_tick_to_degrees_per_second(value):
     return np.degrees(value) * 20  # 20 ticks per second
 
 
+def draw_absolute_pose_widget(frame_bgr, x, y, z, yaw, pitch):
+    """Draw a pose widget showing absolute 5D pose (x, y, z, yaw, pitch).
+
+    yaw and pitch are expected in mineflayer-internal radians. Display
+    converts to Notchian (Minecraft) convention:
+    yaw_notch = pi - yaw_internal, pitch_notch = -pitch_internal.
+    Mirrors the model-side widget in layout/style; adapted from 6D to 5D
+    input (yaw angle used directly instead of cos/sin encoding).
+    """
+    for v in (x, y, z, yaw, pitch):
+        if not np.isfinite(v):
+            return frame_bgr
+
+    notch_yaw = np.pi - float(yaw)
+    notch_pitch = -float(pitch)
+    h = frame_bgr.shape[0]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    aa = cv2.LINE_AA
+
+    widget_x = 10
+    widget_w = 340
+    widget_h = 290
+    widget_y = h - widget_h - 10
+
+    overlay = frame_bgr.copy()
+    cv2.rectangle(
+        overlay,
+        (widget_x, widget_y),
+        (widget_x + widget_w, widget_y + widget_h),
+        (0, 0, 0),
+        -1,
+    )
+    frame_bgr = cv2.addWeighted(overlay, 0.6, frame_bgr, 0.4, 0)
+
+    cv2.putText(
+        frame_bgr,
+        "Abs. Pose",
+        (widget_x + 10, widget_y + 30),
+        font,
+        0.85,
+        (200, 200, 200),
+        2,
+        aa,
+    )
+    cv2.putText(
+        frame_bgr,
+        f"X:{x:.1f}  Y:{y:.1f}",
+        (widget_x + 10, widget_y + 62),
+        font,
+        0.72,
+        (230, 230, 230),
+        2,
+        aa,
+    )
+    cv2.putText(
+        frame_bgr,
+        f"Z:{z:.1f}",
+        (widget_x + 10, widget_y + 90),
+        font,
+        0.72,
+        (230, 230, 230),
+        2,
+        aa,
+    )
+
+    cx = widget_x + 100
+    cy = widget_y + 195
+    radius = 72
+    cv2.circle(frame_bgr, (cx, cy), radius, (140, 140, 140), 2, aa)
+    cv2.circle(frame_bgr, (cx, cy), 5, (255, 255, 255), -1, aa)
+    cv2.putText(frame_bgr, "N", (cx - 9, cy - radius + 20), font, 0.65, (200, 200, 200), 2, aa)
+    cv2.putText(frame_bgr, "S", (cx - 9, cy + radius - 3), font, 0.65, (200, 200, 200), 2, aa)
+    cv2.putText(frame_bgr, "E", (cx + radius - 16, cy + 7), font, 0.65, (200, 200, 200), 2, aa)
+    cv2.putText(frame_bgr, "W", (cx - radius + 3, cy + 7), font, 0.65, (200, 200, 200), 2, aa)
+
+    needle_len = radius - 14
+    ndx = int(-np.sin(notch_yaw) * needle_len)
+    ndy = int(np.cos(notch_yaw) * needle_len)
+    cv2.arrowedLine(
+        frame_bgr,
+        (cx, cy),
+        (cx + ndx, cy + ndy),
+        (0, 220, 255),
+        3,
+        aa,
+        tipLength=0.32,
+    )
+    yaw_deg = (np.degrees(notch_yaw) + 180) % 360 - 180
+    cv2.putText(
+        frame_bgr,
+        f"{yaw_deg:+.0f}deg",
+        (cx - 34, cy + radius + 25),
+        font,
+        0.65,
+        (0, 220, 255),
+        2,
+        aa,
+    )
+    cv2.putText(frame_bgr, "Yaw", (cx - 20, widget_y + 112), font, 0.58, (170, 170, 170), 1, aa)
+
+    gauge_x = widget_x + 248
+    gauge_top = widget_y + 118
+    gauge_bot = widget_y + 258
+    gauge_h = gauge_bot - gauge_top
+    gauge_w = 18
+    cv2.rectangle(frame_bgr, (gauge_x, gauge_top), (gauge_x + gauge_w, gauge_bot), (140, 140, 140), 2, aa)
+    mid_y = gauge_top + gauge_h // 2
+    cv2.line(frame_bgr, (gauge_x, mid_y), (gauge_x + gauge_w, mid_y), (110, 110, 110), 1, aa)
+    cv2.putText(frame_bgr, "^", (gauge_x + gauge_w + 6, gauge_top + 12), font, 0.6, (180, 180, 180), 2, aa)
+    cv2.putText(frame_bgr, "-", (gauge_x + gauge_w + 6, mid_y + 7), font, 0.65, (180, 180, 180), 2, aa)
+    cv2.putText(frame_bgr, "v", (gauge_x + gauge_w + 6, gauge_bot - 2), font, 0.6, (180, 180, 180), 2, aa)
+    pitch_clamped = max(-np.pi / 2, min(np.pi / 2, notch_pitch))
+    frac = (pitch_clamped + np.pi / 2) / np.pi
+    marker_y = int(gauge_top + frac * gauge_h)
+    cv2.rectangle(
+        frame_bgr,
+        (gauge_x + 2, marker_y - 5),
+        (gauge_x + gauge_w - 2, marker_y + 5),
+        (0, 230, 100),
+        -1,
+    )
+    pitch_deg = np.degrees(notch_pitch)
+    cv2.putText(
+        frame_bgr,
+        f"{pitch_deg:+.0f}d",
+        (gauge_x - 14, gauge_bot + 25),
+        font,
+        0.65,
+        (0, 230, 100),
+        2,
+        aa,
+    )
+    cv2.putText(frame_bgr, "Pitch", (gauge_x - 4, widget_y + 112), font, 0.58, (170, 170, 170), 1, aa)
+    return frame_bgr
+
+
 def create_action_overlay(
     frame, action, frame_idx, total_frames, player_label: str = ""
 ):
@@ -339,6 +475,16 @@ def create_action_overlay(
         )
     else:
         cv2.circle(frame, (arrow_center_x, arrow_center_y), 3, (0, 255, 255), -1)
+
+    if all(k in action for k in ("x", "y", "z", "yaw", "pitch")):
+        frame = draw_absolute_pose_widget(
+            frame,
+            action["x"],
+            action["y"],
+            action["z"],
+            action["yaw"],
+            action["pitch"],
+        )
 
     return frame
 
