@@ -9,10 +9,6 @@ const {
 const { GoalXZ } = require("../../utils/bot-factory");
 const { rconTp } = require("../../utils/coordination");
 const { sleep } = require("../../utils/helpers");
-const {
-  hideNameTags,
-  restoreNameTags,
-} = require("../../utils/name-tag-visibility");
 const { BaseEpisode } = require("../base-episode");
 
 const CAMERA_SPEED_DEGREES_PER_SEC = 30;
@@ -20,9 +16,15 @@ const EPISODE_MIN_TICKS = 300;
 const WALL_WIDTH = 9;
 const WALL_HEIGHT = 3;
 const WAYPOINT_TIMEOUT_MS = 8000;
-const GAZE_OFFSET_DEG = 45;
-// Observer holds the 45° antiparallel gaze for this long, then smoothly
-// turns to face perpendicular to the wall (toward the walker's start pos).
+// Both bots rotate this many degrees from "face other bot" in the same
+// sense, so their gazes end up antiparallel. At 60° the other bot sits
+// ~60° off forward — safely outside Minecraft's default 70° FOV — while
+// each bot still sees roughly half of the wall obliquely.
+const GAZE_OFFSET_DEG = 60;
+// Observer holds the antiparallel gaze for this long, then smoothly turns
+// to face perpendicular to the wall (toward the walker's starting position
+// across the wall). Tags are visible so the observer will see the walker's
+// name tag through the wall — the intended "occluded presence" signal.
 const OBSERVER_ANTIPARALLEL_HOLD_TICKS = 80;
 
 function getOnWallOcclusionPhaseFn(
@@ -114,8 +116,8 @@ function getOnWallOcclusionPhaseFn(
         useEasing: false,
       });
     } else {
-      // Observer: hold the 45° antiparallel gaze briefly, then smoothly turn
-      // to face perpendicular to the wall (toward the walker's starting
+      // Observer: hold the antiparallel gaze briefly, then smoothly turn to
+      // face perpendicular to the wall (toward the walker's starting
       // position, which is directly across through the wall).
       await bot.waitForTicks(OBSERVER_ANTIPARALLEL_HOLD_TICKS);
       await lookAtSmooth(bot, otherBotPosition, CAMERA_SPEED_DEGREES_PER_SEC, {
@@ -233,8 +235,6 @@ class WallOcclusionEvalEpisode extends BaseEpisode {
       const fillCmd = `fill ${x1} ${y1} ${z1} ${x2} ${y2} ${z2} stone`;
       const fillRes = await rcon.send(fillCmd);
       console.log(`[${bot.username}] Wall fill result: ${fillRes}`);
-
-      await hideNameTags(rcon, [bot.username, args.other_bot_name]);
     }
 
     const walkerDist = 5.5;
@@ -332,7 +332,6 @@ class WallOcclusionEvalEpisode extends BaseEpisode {
       } catch (err) {
         console.error(`[${bot.username}] Failed to clear wall:`, err);
       }
-      await restoreNameTags(rcon);
     }
   }
 
