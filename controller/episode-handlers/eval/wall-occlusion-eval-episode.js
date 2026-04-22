@@ -21,6 +21,9 @@ const WALL_WIDTH = 9;
 const WALL_HEIGHT = 3;
 const WAYPOINT_TIMEOUT_MS = 8000;
 const GAZE_OFFSET_DEG = 45;
+// Observer holds the 45° antiparallel gaze for this long, then smoothly
+// turns to face perpendicular to the wall (toward the walker's start pos).
+const OBSERVER_ANTIPARALLEL_HOLD_TICKS = 80;
 
 function getOnWallOcclusionPhaseFn(
   bot,
@@ -111,7 +114,14 @@ function getOnWallOcclusionPhaseFn(
         useEasing: false,
       });
     } else {
-      // Observer: stand still, hold the oblique starting gaze
+      // Observer: hold the 45° antiparallel gaze briefly, then smoothly turn
+      // to face perpendicular to the wall (toward the walker's starting
+      // position, which is directly across through the wall).
+      await bot.waitForTicks(OBSERVER_ANTIPARALLEL_HOLD_TICKS);
+      await lookAtSmooth(bot, otherBotPosition, CAMERA_SPEED_DEGREES_PER_SEC, {
+        randomized: false,
+        useEasing: false,
+      });
     }
 
     // Wait for minimum ticks
@@ -175,9 +185,9 @@ class WallOcclusionEvalEpisode extends BaseEpisode {
     const walkerIsLead = sharedBotRng() < 0.5;
     this._isWalker = walkerIsLead === isLeadBot;
 
-    this._goLeft = sharedBotRng() < 0.5;
-
-    // Shared rotational sense for antiparallel gazes
+    // Shared rotational sense for antiparallel gazes. The walker's direction
+    // around the wall is derived from this rotation so the walker travels
+    // toward where they are already looking (see below).
     const rotateCW = sharedBotRng() < 0.5;
 
     const midX = (botPosition.x + otherBotPosition.x) / 2;
@@ -227,17 +237,6 @@ class WallOcclusionEvalEpisode extends BaseEpisode {
       await hideNameTags(rcon, [bot.username, args.other_bot_name]);
     }
 
-    this._evalMetadata = {
-      wall_width: WALL_WIDTH,
-      wall_height: WALL_HEIGHT,
-      wall_center: { x: wallCenterX, y: wallCenterY, z: wallCenterZ },
-      wall_axis: wallAxis,
-      role: this._isWalker ? "walker" : "observer",
-      walk_direction: this._goLeft ? "left" : "right",
-      rotation_direction: rotateCW ? "cw" : "ccw",
-      gaze_angle_deg: GAZE_OFFSET_DEG,
-    };
-
     const walkerDist = 5.5;
     const observerDist = 7.5;
     const cx = wallCenterX + 0.5;
@@ -259,6 +258,38 @@ class WallOcclusionEvalEpisode extends BaseEpisode {
       this._walkerSide = this._isWalker ? botSide : -botSide;
     }
 
+    // Rotation setup (shared sign across both bots → antiparallel gazes)
+    const theta = (GAZE_OFFSET_DEG * Math.PI) / 180;
+    const s = rotateCW ? Math.sin(theta) : -Math.sin(theta);
+    const c = Math.cos(theta);
+    // 2D rotation about Y. CW-from-above matrix: [[c, s], [-s, c]] on (x, z).
+
+    // Choose walker's path direction from the walker's rotated gaze so the
+    // walker moves toward where it is looking. Compute this from the walker's
+    // perspective (using both positions) so both bots agree on the result.
+    const walkerPos = this._isWalker ? botPosNew : otherPosNew;
+    const observerPos = this._isWalker ? otherPosNew : botPosNew;
+    const walkerBaseDx = observerPos.x - walkerPos.x;
+    const walkerBaseDz = observerPos.z - walkerPos.z;
+    const walkerMag =
+      Math.sqrt(walkerBaseDx * walkerBaseDx + walkerBaseDz * walkerBaseDz) || 1;
+    const wux = walkerBaseDx / walkerMag;
+    const wuz = walkerBaseDz / walkerMag;
+    const walkerRx = c * wux + s * wuz;
+    const walkerRz = -s * wux + c * wuz;
+    this._goLeft = wallAxis === "x" ? walkerRx < 0 : walkerRz < 0;
+
+    this._evalMetadata = {
+      wall_width: WALL_WIDTH,
+      wall_height: WALL_HEIGHT,
+      wall_center: { x: wallCenterX, y: wallCenterY, z: wallCenterZ },
+      wall_axis: wallAxis,
+      role: this._isWalker ? "walker" : "observer",
+      walk_direction: this._goLeft ? "left" : "right",
+      rotation_direction: rotateCW ? "cw" : "ccw",
+      gaze_angle_deg: GAZE_OFFSET_DEG,
+    };
+
     console.log(
       `[${bot.username}] Role: ${this._isWalker ? "WALKER" : "OBSERVER"}, direction: ${this._goLeft ? "left" : "right"}, rotate: ${rotateCW ? "CW" : "CCW"}`,
     );
@@ -266,20 +297,13 @@ class WallOcclusionEvalEpisode extends BaseEpisode {
     await rconTp(rcon, bot.username, botPosNew.x, botPosNew.y, botPosNew.z);
     await sleep(1000);
 
-    // Build a fake-target 10 blocks away in this bot's rotated gaze direction.
-    // Baseline = unit vector from this bot toward the other bot (XZ only).
-    // Both bots apply the same rotation sign → antiparallel gazes on one axis.
+    // This bot's rotated gaze — a fake target 10 blocks along its rotated
+    // baseline direction, used by the outer lookAtSmooth to set initial yaw.
     const baseDx = otherPosNew.x - botPosNew.x;
     const baseDz = otherPosNew.z - botPosNew.z;
     const mag = Math.sqrt(baseDx * baseDx + baseDz * baseDz) || 1;
     const ux = baseDx / mag;
     const uz = baseDz / mag;
-
-    const theta = (GAZE_OFFSET_DEG * Math.PI) / 180;
-    const s = rotateCW ? Math.sin(theta) : -Math.sin(theta);
-    const c = Math.cos(theta);
-    // 2D rotation about Y. With Minecraft's right-handed XZ plane:
-    //   CW-from-above rotation matrix: [[c, s], [-s, c]] applied to (x, z).
     const rx = c * ux + s * uz;
     const rz = -s * ux + c * uz;
 
